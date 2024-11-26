@@ -27,13 +27,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	req := make([]byte, 4096)
-	conn.Read(req)
+	buf := make([]byte, 4096)
+	conn.Read(buf)
 
-	if !strings.HasPrefix(string(req), "GET / HTTP/1.1") {
+	lines := strings.Split(string(buf), "\r\n")
+	route := strings.Split(lines[0], " ")[1]
+
+	if route == "/" {
+		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+	} else if strings.HasPrefix(route, "/echo/") {
+		param := strings.SplitN(route, "/", 3)[2]
+		conn.Write([]byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(param), param)))
+	} else {
 		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
-		conn.Close()
-		return
 	}
-	conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 }
