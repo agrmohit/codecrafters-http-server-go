@@ -1,44 +1,48 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 )
 
-// Ensures gofmt doesn't remove the "net" and "os" imports above (feel free to remove this!)
-var _ = net.Listen
-var _ = os.Exit
-
 func main() {
+	// You can use print statements as follows for debugging, they'll be visible when running tests.
+	fmt.Println("Logs from your program will appear here!")
+	// Uncomment this block to pass the first stage
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
 		os.Exit(1)
 	}
-
-	defer l.Close()
-	fmt.Println("Server  is listening on port 4221")
-
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+		go handleConnection(conn)
 	}
-
-	buf := make([]byte, 4096)
-	conn.Read(buf)
-
-	lines := strings.Split(string(buf), "\r\n")
-	route := strings.Split(lines[0], " ")[1]
-
-	if route == "/" {
-		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
-	} else if strings.HasPrefix(route, "/echo/") {
-		param := strings.SplitN(route, "/", 3)[2]
-		conn.Write([]byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(param), param)))
+}
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	req, err := http.ReadRequest(reader)
+	if err != nil {
+		fmt.Println("Error writing to connection: ", err.Error())
+		return
+	}
+	if req.URL.Path == "/" {
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n\r\n")
+	} else if strings.HasPrefix(req.URL.Path, "/echo/") {
+		echoStr := strings.TrimPrefix(req.URL.Path, "/echo/")
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(echoStr), echoStr)
+	} else if req.URL.Path == "/user-agent" {
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(req.UserAgent()), req.UserAgent())
 	} else {
-		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
 	}
 }
